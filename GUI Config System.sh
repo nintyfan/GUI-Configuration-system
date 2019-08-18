@@ -14,11 +14,73 @@
 #     You should have received a copy of the GNU General Public License
 #     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-function fatal
+function fatal_kdialog
 {
-  echo $0
-  $DIALOG --msgbox $0
+  echo "$1"
+  $DIALOG --msgbox "$1"
   exit 1
+}
+
+function displ_file_kdialog
+{
+  $DIALOG --textbox "$1"
+}
+
+function ask_kdialog
+{
+  $DIALOG  --yesno "$1"
+}
+
+function ask_to_continue_kdialog
+{
+  ask_kdialog "$1"
+  if [ ! $? -eq 0 ]; then exit; fi
+}
+
+
+function fatal_zenity
+{
+  echo "$1"
+  $DIALOG --error --text="$1"
+  exit 1
+}
+
+function displ_file_zenity
+{
+  $DIALOG --text-info --cancel-label="ok" --filename="$1"
+}
+
+function ask_zenity
+{
+  $DIALOG  --question --text="$1"
+}
+
+function ask_to_continue_zenity
+{
+  ask_zenity "$1"
+  if [ ! $? -eq 0 ]; then exit; fi
+}
+
+function fatal_dialog
+{
+  $DIALOG --msgbox  "$1" 5 200
+  exit 1
+}
+
+function displ_file_dialog
+{
+  $DIALOG --textbox "$1" 200 200
+}
+
+function ask_dialog
+{
+  $DIALOG  --yesno "$1" 200 200
+}
+
+function ask_to_continue_dialog
+{
+  ask_dialog "$1"
+  if [ ! $? -eq 0 ]; then exit; fi
 }
 
 if [ "x$DIALOG" == "x" ]; then
@@ -36,21 +98,47 @@ elif [ "x$DISPLAY" != "x" ]; then
    fi
 else
   DIALOG=dialog
+  
+fi
 fi
 
-if [ "x$DIALOG" == 'xdialog' ] && ! isatty /dev/stdin; then
-   wall 'Cannot find usable dialog program'
-   exit 1
+if [ "x$DISPLAY" == "x" ]; then
+  DIALOG=dialog
 fi
+
+if [ "x$DIALOG" == 'xdialog' ] && [ ! -F 0 ]; then
+  wall 'Cannot find usable dialog program'
+  exit 1
+fi
+
+if [ "x$DIALOG" == 'xdialog' ]; then
+
+  fatal=fatal_dialog
+  display_file=displ_file_dialog
+  ask_to_continue=ask_to_continue_dialog
+  ask=ask_dialog
+elif [ "x$DIALOG" == 'xzenity' ]; then
+   
+   fatal=fatal_zenity
+   display_file=displ_file_zenity
+   ask_to_continue=ask_to_continue_zenity
+   ask=ask_zenity
+elif [ "x$DIALOG" == 'xkdialog' ]; then
+   
+  
+  fatal=fatal_kdialog
+  display_file=displ_file_kdialog
+  ask_to_continue=ask_to_continue_kdialog
+  ask=ask_kdialog
 fi
 
 path=$1
 if [ "x$path" == "x" ]; then
-  fatal 'Sorry, you must provide a path to archive'
+  $fatal 'Sorry, you must provide a path to archive'
 fi
 
 if [ ! $UID -eq 0 ]; then
-  $DIALOG --yesno "Currently it's a necessary to run this utility as root. Relaunch as root?"
+  $ask "Currently it's a necessary to run this utility as root. Relaunch as root?"
   if [ $? -eq 0 ]; then
     
     #joined="${@}"
@@ -78,17 +166,17 @@ tar -xf $path -C $output 2> $steps/0-errors
 
 if [ ! $? -eq 0 ]; then
    
-  $DIALOG --textbox $steps/0-errors
+  $display_file $steps/0-errors
   exit 1
 fi
 
 if [ ! -f $output/metainfo-package-list ] ||  [ "$(wc -c $output/metainfo-package-list | cut -d' ' -f1 )" -eq 0 ]; then
-  fatal "Empty package list file or package list file doesn't exist!"
+  $fatal "Empty package list file or package list file doesn't exist!"
   exit 1
 fi
 
 if [ ! -f $output/metainfo-flatpak ] ||  [ "$(wc -c $output/metainfo-package-list | cut -d' ' -f1 )" -eq 0 ]; then
-  fatal "Empty metainfo for flatpak file or flatpak metainfo file doesn't exist!"
+  $fatal "Empty metainfo for flatpak file or flatpak metainfo file doesn't exist!"
   exit 1
 fi
 
@@ -118,9 +206,8 @@ if [ -e $steps/1-errors ] && [ ! "$(wc -c $steps/1-errors | cut -d' ' -f1 )" -eq
    mv $steps/1-errors-issue $steps/1
 fi
 
-$DIALOG  --textbox $steps/1
-$DIALOG  --yesno 'Continue?'
-if [ ! $? -eq 0 ]; then exit; fi
+$display_file $steps/1
+$ask_to_continue 'Continue?'
 fl_runtime_name=""
 fl_runtime_version=""
 fl_runtime_branch=""
@@ -140,8 +227,7 @@ IFS=':';
    fi
 done < $output/metainfo-flatpak
 unset IFS
-$DIALOG --yesno 'It will going be '$fl_runtime_name' runned (version '$fl_runtime_version' branch '$fl_runtime_branch'). Continue?'
-if [ ! $? -eq 0 ]; then exit; fi
+$ask_to_continue 'It will going be '$fl_runtime_name' runned (version '$fl_runtime_version' branch '$fl_runtime_branch'). Continue?'
 
 flatpak run -p --system --socket=pulseaudio --socket=fallback-x11 --filesystem=$output --filesystem=$runtime:rw --command=/bin/bash $fl_runtime_name//$fl_runtime_version -c "mkdir -p /GCS/; ln -s $output /GCS/application; ln -s $runtime /GCS/runtime; /GCS/application/config-app"
 
@@ -149,7 +235,6 @@ echo Bellow are attached errors during calculating the changes made by tool you 
 echo Bellow are attached changes made by tool you was run \(ALL FILES WITH POSSIBLE CHANGES ARE: $runtime \) > $steps/2
   
 pushd $runtime
-#find . -type f -exec diff $runtime/{} /{} \; >> $steps/2 2> $steps/2-errors
 find . -type f -exec /bin/bash /dev/stdin {} \;  >> $steps/2 2> $steps/2-errors <<EOF
 cmp $runtime/\$1 /\$1 2> /dev/null || (
   echo \$1
@@ -165,9 +250,7 @@ rm $steps/2
 mv $steps/2-errors-issue $steps/2
 fi
 
-$DIALOG  --textbox $steps/2
-$DIALOG  --yesno 'Replace?'
-if [ ! $? -eq 0 ]; then exit; fi
+$display_file $steps/2
+$ask_to_continue 'Replace?'
 
-mkdir $HOME/runtime
-cp -r $runtime $HOME/runtime
+cp -r $runtime /
