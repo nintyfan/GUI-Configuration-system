@@ -127,7 +127,7 @@ if [ "x$DISPLAY" == "x" ]; then
   DIALOG=dialog
 fi
 
-if [ "x$DIALOG" == 'xdialog' ] && [ -F 0 ]; then
+if [ "x$DIALOG" == 'xdialog' ] && ! tty -s; then
   wall 'Cannot find usable dialog program'
   exit 1
 fi
