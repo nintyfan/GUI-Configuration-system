@@ -37,6 +37,11 @@ function ask_to_continue_kdialog
   if [ ! $? -eq 0 ]; then exit; fi
 }
 
+function select_file_kdialog
+{
+  $DIALOG --getopenfilename "$PWD" "*"
+}
+
 
 function fatal_zenity
 {
@@ -61,6 +66,11 @@ function ask_to_continue_zenity
   if [ ! $? -eq 0 ]; then exit; fi
 }
 
+function select_file_zenity
+{
+  $DIALOG --file-selection
+}
+
 function fatal_dialog
 {
   $DIALOG --msgbox  "$1" 5 200
@@ -81,6 +91,17 @@ function ask_to_continue_dialog
 {
   ask_dialog "$1"
   if [ ! $? -eq 0 ]; then exit; fi
+}
+
+function select_file_dialog
+{
+  local dir
+  dir="$PWD"
+  while [ -d "$dir" ]; do
+     dir=${dir/\/\//\/}
+     dir=`$DIALOG --stdout --fselect "$dir/" 20 200`
+  done
+  echo $dir
 }
 
 if [ "x$DIALOG" == "x" ]; then
@@ -106,7 +127,7 @@ if [ "x$DISPLAY" == "x" ]; then
   DIALOG=dialog
 fi
 
-if [ "x$DIALOG" == 'xdialog' ] && [ ! -F 0 ]; then
+if [ "x$DIALOG" == 'xdialog' ] && [ -F 0 ]; then
   wall 'Cannot find usable dialog program'
   exit 1
 fi
@@ -117,12 +138,14 @@ if [ "x$DIALOG" == 'xdialog' ]; then
   display_file=displ_file_dialog
   ask_to_continue=ask_to_continue_dialog
   ask=ask_dialog
+  select_file=select_file_dialog
 elif [ "x$DIALOG" == 'xzenity' ]; then
    
    fatal=fatal_zenity
    display_file=displ_file_zenity
    ask_to_continue=ask_to_continue_zenity
    ask=ask_zenity
+   select_file=select_file_zenity
 elif [ "x$DIALOG" == 'xkdialog' ]; then
    
   
@@ -130,11 +153,13 @@ elif [ "x$DIALOG" == 'xkdialog' ]; then
   display_file=displ_file_kdialog
   ask_to_continue=ask_to_continue_kdialog
   ask=ask_kdialog
+  select_file=select_file_kdialog
 fi
 
 path=$1
 if [ "x$path" == "x" ]; then
-  $fatal 'Sorry, you must provide a path to archive'
+  path=`$select_file`
+  [ "x$path" == "x" ] && $fatal 'Sorry, you must provide a path to archive'
 fi
 
 if [ ! $UID -eq 0 ]; then
@@ -162,7 +187,7 @@ runtime=`mktemp -d`
 
 trap "echo Removing $output; rm -rf $output; echo Removing $steps; rm -rf $steps; echo Removing $runtime; rm -rf $runtime;" TERM EXIT
 
-tar -xf $path -C $output 2> $steps/0-errors
+tar -xf "$path" -C $output 2> $steps/0-errors
 
 if [ ! $? -eq 0 ]; then
    
